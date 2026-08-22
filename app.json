@@ -1,25 +1,69 @@
 {
   "expo": {
-    "name": "arise-revamp",
+    "name": "ARISE",
     "slug": "arise-revamp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "arise",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.arise.explorer",
+      "infoPlist": {
+        "NSCameraUsageDescription": "ARISE uses your camera to scan room placards and detect doors for AR.",
+        "NSMicrophoneUsageDescription": "ARISE uses your microphone for AR experiences."
+      }
     },
     "android": {
+      "package": "com.arise.explorer",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FDFBF7",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "ARISE uses your camera to scan room placards and detect doors.",
+          "microphonePermission": "ARISE uses your microphone for AR experiences.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-secure-store",
+      [
+        "react-native-fast-tflite",
+        {
+          "enableAndroidGpuLibraries": true
+        }
+      ],
+      [
+        "@reactvision/react-viro",
+        {
+          "android": {
+            "xRMode": "AR"
+          },
+          "ios": {
+            "cameraUsagePermission": "ARISE uses your camera for AR portal experiences.",
+            "microphoneUsagePermission": "ARISE uses your microphone for AR experiences.",
+            "photosPermission": "ARISE would like to read photos for AR experiences.",
+            "savePhotosPermission": "ARISE would like to save photos to your library during AR experiences."
+          },
+          "provider": "reactvision"
+        }
+      ],
+      "@react-native-google-signin/google-signin",
+      "expo-asset"
+    ]
   }
 }
