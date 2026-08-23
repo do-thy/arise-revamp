@@ -12,7 +12,7 @@
 ARISE is an indoor wayfinding + augmented reality application. A user logs in, scans a
 physical room placard with the camera, and the app OCRs the placard text, resolves the
 room via fuzzy matching against a room database, then uses a deterministic point-and-tap
-raycast against Viro AR vertical planes to anchor a **portal** to the doorway. Peering
+raycast against Viro AR vertical planes to anchor a **window portal** on a blank wall. Peering
 through the portal reveals a **360° panoramic image** of the matched room, plus an
 information bottom sheet.
 
@@ -115,7 +115,7 @@ arise-revamp/
 │   ├── rules/blueprint.md
 │   └── logs/CHANGELOG.md
 ├── assets/
-│   ├── models/                     # door_frame.obj (+ .mtl), OCR .onnx
+│   ├── models/                     # window_frame.obj (+ .mtl), OCR .onnx
 │   └── 360/                        # room_101.jpg (sample 360° equirectangular texture)
 ├── theme/                          # Design system
 │   ├── colors.ts
@@ -280,7 +280,7 @@ Discriminated-union state:
 | `capture` | Red `#E60000` | "Ensure the entire placard is inside the box." + "SCAN PLACARD" |
 | `processing` | Red | Spinner ("Reading placard…") |
 | `suggestions` | Yellow `#FFCC00` | "No exact match. Did you mean?" + suggestion pills + Cancel |
-| `arPlacement` | AR + centered crosshair | Guidance banner + "PLACE PORTAL HERE" |
+| `arPlacement` | AR + centered crosshair | Guidance banner + "PLACE WINDOW HERE" |
 | `portal` | AR (portal anchored) | Room information bottom sheet |
 
 ### 7.3 Camera lifecycle & native resource handoff (critical)
@@ -345,18 +345,20 @@ camera consumer at a time (never `CameraView` and `ViroARSceneNavigator` simulta
 
 ---
 
-## 9. AR Portal Rendering (`components/ar/PortalScene.tsx`)
+## 9. AR Window Portal Rendering (`components/ar/PortalScene.tsx`)
 
 `PortalScene` is a `forwardRef` component that wraps `ViroARSceneNavigator` and exposes a
-`placePortal()` imperative handle to the screen. Its inner `ViroARScene` implements the
-stabilized point-and-tap placement:
+`placePortal()` imperative handle to the screen. The portal acts as a **horizontal 6DoF
+viewing window** (rather than a doorway) into the 360° classroom environment, providing a
+wider, more immersive field of view. Its inner `ViroARScene` implements the stabilized
+point-and-tap placement:
 
 1. **Tracking gating** — `onTrackingUpdated` is recorded into a ref; placement is rejected
    until the state reaches `ViroTrackingStateConstants.TRACKING_NORMAL`.
-2. **Raycast** — on tap (scene `onClick`) or the "PLACE PORTAL HERE" button,
+2. **Raycast** — on tap (scene `onClick`) or the "PLACE WINDOW HERE" button,
    `performARHitTestWithPoint(0.5, 0.5)` hit-tests the viewport center against detected
    planes. Results of type `ExistingPlane` / `ExistingPlaneUsingExtent` (vertical
-   walls/doors) within **1.5–3.5 m** of the camera are accepted.
+   blank walls) within **1.5–3.5 m** of the camera are accepted.
 3. **Forward-vector fallback** — if no vertical plane matches, the anchor is projected
    **2.0 m** forward along the camera orientation vector and dropped 0.3 m below the eye:
    `Target = [Cx + fx·2.0, Cy − 0.3, Cz + fz·2.0]`.
@@ -365,7 +367,7 @@ stabilized point-and-tap placement:
    `Δx = Cx − Px`, `Δz = Cz − Pz`, `θY = atan2(Δx, Δz)·(180/π)`, then
    `rotation={[0, θY, 0]}`.
 5. **Scene graph** — `<ViroPortalScene passable position rotation={[0, θY, 0]}>` wraps
-   `<ViroPortal>` containing `<Viro3DObject type="OBJ" source={door_frame.obj} />` and
+   `<ViroPortal>` containing `<Viro3DObject type="OBJ" source={window_frame.obj} />` and
    `<Viro360Image source={{ uri: room.panoramic360Url }} />`.
 
 > Viro requires `npx expo prebuild` (ARCore on Android / ARKit on iOS) and the
@@ -378,7 +380,7 @@ stabilized point-and-tap placement:
 See `.kilo/logs/CHANGELOG.md` for the running list. Key items:
 
 1. **Model files** to place in `assets/`:
-   - `assets/models/door_frame.obj` (+ `.mtl` + textures) — portal door frame.
+   - `assets/models/window_frame.obj` (+ `.mtl` + textures) — horizontal window frame (wider FOV).
    - `assets/models/det_model.onnx` — PaddleOCR DBNet text detection.
    - `assets/models/cls_model.onnx` — PaddleOCR angle classifier.
    - `assets/models/rec_model.onnx` — PaddleOCR text recognition.

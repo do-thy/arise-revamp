@@ -70,4 +70,13 @@
 - **Files Affected:** `.kilo/rules/blueprint.md`, `assets/models/README.md`, `components/ar/PortalScene.tsx`, `screens/PlacardScannerScreen.tsx`, `types/index.ts`, `services/tflite/README.md`, `.kilo/logs/CHANGELOG.md`
 - **Manual Actions Required by Developer:** Updated checklist removing TFLite model training; remaining deliverables are `door_frame.obj` (+ `.mtl`), `det_model.onnx`, `cls_model.onnx`, `rec_model.onnx`, `assets/360/room_101.jpg`, plus Firebase `.env` / `google-services.json`.
 
+---
+
+- **Timestamp:** 2026-08-22 14:20
+- **Feature / Component:** AR Portal UX Pivot (Door to Window)
+- **Changes Made:** Refactored the Phase C HUD guidance banner to "Stand ~2m back, aim at a blank wall, and tap to place the viewing window." and the action button to "PLACE WINDOW HERE". Renamed the required asset from `door_frame.obj` to `window_frame.obj` in `PortalScene.tsx` and updated the blueprint and asset checklist to describe the portal as a horizontal 6DoF viewing window for a wider Field of View (FOV). Validated with `tsc --noEmit` (0 errors).
+- **Files Affected:** `components/ar/PortalScene.tsx`, `screens/PlacardScannerScreen.tsx`, `.kilo/rules/blueprint.md`, `assets/models/README.md`, `.kilo/logs/CHANGELOG.md`
+- **Manual Actions Required by Developer:** Place `assets/models/window_frame.obj` (+ `.mtl` + textures) instead of `door_frame.obj`.
+
+
 

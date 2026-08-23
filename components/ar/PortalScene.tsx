@@ -1,10 +1,10 @@
 /**
- * Stabilized "Point-and-Tap" AR portal placement (blueprint §7.2 / §9).
+ * Stabilized "Point-and-Tap" AR window-portal placement (blueprint §7.2 / §9).
  *
- * Replaces the deprecated TFLite door detection. Placement is gated on
- * `TRACKING_NORMAL`, raycasts the viewport center (0.5, 0.5) against vertical planes,
- * falls back to a 2.0 m forward projection, and locks the anchor upright by forcing
- * pitch/roll to 0 and computing only the yaw toward the camera.
+ * Placement is gated on `TRACKING_NORMAL`, raycasts the viewport center (0.5, 0.5)
+ * against vertical planes (blank walls), falls back to a 2.0 m forward projection, and
+ * locks the anchor upright by forcing pitch/roll to 0 and computing only the yaw toward
+ * the camera.
  */
 import {
   forwardRef,
@@ -29,7 +29,7 @@ import {
   type ViroTrackingState,
 } from '@reactvision/react-viro';
 import type { Room, Vec3 } from '../../types';
-import doorFrameAsset from '../../assets/models/door_frame.obj';
+import windowFrameAsset from '../../assets/models/window_frame.obj';
 
 const PLACEMENT_DISTANCE_METERS = 2.0;
 const PLACEMENT_HEIGHT_DROP_METERS = 0.3;
@@ -136,7 +136,7 @@ function PortalARScene({ room, onPlaced, onPlacementError, apiRef }: PortalARSce
   const placePortal = useCallback(async () => {
     if (!trackingNormal.current) {
       onPlacementError?.(
-        'AR is still initialising. Keep the camera still and aim at the doorway.',
+        'AR is still initialising. Keep the camera still and aim at a blank wall.',
       );
       return;
     }
@@ -168,7 +168,7 @@ function PortalARScene({ room, onPlaced, onPlacementError, apiRef }: PortalARSce
       } else {
         if (!pose) {
           onPlacementError?.(
-            'Unable to read the camera pose. Aim at a wall or door and try again.',
+            'Unable to read the camera pose. Aim at a blank wall and try again.',
           );
           return;
         }
@@ -203,7 +203,7 @@ function PortalARScene({ room, onPlaced, onPlacementError, apiRef }: PortalARSce
       {placement ? (
         <ViroPortalScene passable position={placement.position} rotation={placement.rotation}>
           <ViroPortal>
-            <Viro3DObject type="OBJ" source={doorFrameAsset} />
+            <Viro3DObject type="OBJ" source={windowFrameAsset} />
             <Viro360Image source={{ uri: room.panoramic360Url }} />
           </ViroPortal>
         </ViroPortalScene>

@@ -203,10 +203,10 @@ export function PlacardScannerScreen({ navigation }: Props) {
               ) : null}
               <View style={styles.instructionPill}>
                 <Text style={styles.instructionText}>
-                  Stand ~2m from the doorway, aim at the base, and tap to place portal.
+                  Stand ~2m back, aim at a blank wall, and tap to place the viewing window.
                 </Text>
               </View>
-              <PillButton title="PLACE PORTAL HERE" onPress={handlePlacePortal} />
+              <PillButton title="PLACE WINDOW HERE" onPress={handlePlacePortal} />
             </View>
           </View>
         ) : (
