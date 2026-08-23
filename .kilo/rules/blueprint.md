@@ -47,8 +47,9 @@ The repository is a **pristine Expo SDK 57 template**:
   `crop` / `resize` actions; used to crop the captured frame to the reticle bounding box.
 - **`expo-linear-gradient`** — gradient surfaces where required.
 - **`@reactvision/react-viro` ^2.58** — `ViroARSceneNavigator`, `ViroARScene`,
-  `ViroPortalScene`, `ViroPortal`, `Viro360Image`, `Viro3DObject`. Config plugin
-  `@reactvision/react-viro` (verified against the official Expo starter kit).
+  `ViroPortalScene`, `ViroPortal`, `Viro360Image`, `ViroBox`, `ViroNode`,
+  `ViroMaterials`. Config plugin `@reactvision/react-viro` (verified against the
+  official Expo starter kit).
 - ~~`react-native-fast-tflite` ^3.0~~ — **deprecated**: removed with the TFLite door-detection
   pipeline; the npm package remains installed but is unused (see `services/tflite/README.md`).
 - **`onnxruntime-react-native` ^1.24** — `ort.InferenceSession.create(uri)` + `session.run`.
@@ -109,13 +110,13 @@ arise-revamp/
 ├── App.tsx                         # Root: SafeAreaProvider + Navigation + auth gate
 ├── index.ts                        # registerRootComponent (unchanged)
 ├── app.json                        # Config plugins + permissions
-├── metro.config.js                 # tflite/obj/gltf asset extensions
+├── metro.config.js                 # onnx asset extension (OCR model weights)
 ├── .env.example                    # Template for env vars
 ├── .kilo/
 │   ├── rules/blueprint.md
 │   └── logs/CHANGELOG.md
 ├── assets/
-│   ├── models/                     # window_frame.obj (+ .mtl), OCR .onnx
+│   ├── models/                     # OCR .onnx (det / cls / rec)
 │   └── 360/                        # room_101.jpg (sample 360° equirectangular texture)
 ├── theme/                          # Design system
 │   ├── colors.ts
@@ -350,8 +351,10 @@ camera consumer at a time (never `CameraView` and `ViroARSceneNavigator` simulta
 `PortalScene` is a `forwardRef` component that wraps `ViroARSceneNavigator` and exposes a
 `placePortal()` imperative handle to the screen. The portal acts as a **horizontal 6DoF
 viewing window** (rather than a doorway) into the 360° classroom environment, providing a
-wider, more immersive field of view. Its inner `ViroARScene` implements the stabilized
-point-and-tap placement:
+wider, more immersive field of view. **The AR Window Portal is constructed 100%
+programmatically using Viro primitives — no external 3D geometry is used.** The official
+window dimension ratio is **1 m height × 2 m width (2:1 aspect ratio)**. Its inner
+`ViroARScene` implements the stabilized point-and-tap placement:
 
 1. **Tracking gating** — `onTrackingUpdated` is recorded into a ref; placement is rejected
    until the state reaches `ViroTrackingStateConstants.TRACKING_NORMAL`.
@@ -367,8 +370,11 @@ point-and-tap placement:
    `Δx = Cx − Px`, `Δz = Cz − Pz`, `θY = atan2(Δx, Δz)·(180/π)`, then
    `rotation={[0, θY, 0]}`.
 5. **Scene graph** — `<ViroPortalScene passable position rotation={[0, θY, 0]}>` wraps
-   `<ViroPortal>` containing `<Viro3DObject type="OBJ" source={window_frame.obj} />` and
-   `<Viro360Image source={{ uri: room.panoramic360Url }} />`.
+   `<ViroPortal>` containing:
+   - a `<ViroBox>` portal mask (the 2 m × 1 m cutout),
+   - four thin `<ViroBox>` primitives (top / bottom / left / right) grouped under a
+     `<ViroNode>` forming the white frame (material `whiteWindowFrame`),
+   - `<Viro360Image source={{ uri: room.panoramic360Url }} />` revealed through the portal.
 
 > Viro requires `npx expo prebuild` (ARCore on Android / ARKit on iOS) and the
 > `@reactvision/react-viro` config plugin in `app.json`.
@@ -380,12 +386,12 @@ point-and-tap placement:
 See `.kilo/logs/CHANGELOG.md` for the running list. Key items:
 
 1. **Model files** to place in `assets/`:
-   - `assets/models/window_frame.obj` (+ `.mtl` + textures) — horizontal window frame (wider FOV).
    - `assets/models/det_model.onnx` — PaddleOCR DBNet text detection.
    - `assets/models/cls_model.onnx` — PaddleOCR angle classifier.
    - `assets/models/rec_model.onnx` — PaddleOCR text recognition.
    - `assets/360/room_101.jpg` — sample 360° equirectangular room texture.
-   (No TFLite door detector is required — see §8.3.)
+   (No external 3D geometry or TFLite door detector is required — the window portal is
+   built from programmatic Viro primitives, see §9.)
 2. **Firebase** — populate `EXPO_PUBLIC_FIREBASE_*` in `.env`.
 3. **Google Sign-In** — `google-services.json` (Android) / `GoogleService-Info.plist` (iOS)
    + `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`.

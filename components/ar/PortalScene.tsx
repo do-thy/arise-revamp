@@ -1,10 +1,11 @@
 /**
  * Stabilized "Point-and-Tap" AR window-portal placement (blueprint §7.2 / §9).
  *
- * Placement is gated on `TRACKING_NORMAL`, raycasts the viewport center (0.5, 0.5)
- * against vertical planes (blank walls), falls back to a 2.0 m forward projection, and
- * locks the anchor upright by forcing pitch/roll to 0 and computing only the yaw toward
- * the camera.
+ * The window portal is built 100% programmatically from Viro primitives (`ViroBox`,
+ * `ViroNode`) — no external 3D geometry (.obj/.mtl) is used. Placement is gated on
+ * `TRACKING_NORMAL`, raycasts the viewport center (0.5, 0.5) against vertical planes
+ * (blank walls), falls back to a 2.0 m forward projection, and locks the anchor upright
+ * by forcing pitch/roll to 0 and computing only the yaw toward the camera.
  */
 import {
   forwardRef,
@@ -18,9 +19,10 @@ import {
 import {
   ViroARScene,
   ViroARSceneNavigator,
+  ViroBox,
   Viro360Image,
-  Viro3DObject,
   ViroMaterials,
+  ViroNode,
   ViroPortal,
   ViroPortalScene,
   ViroTrackingStateConstants,
@@ -30,10 +32,9 @@ import {
   type ViroTrackingState,
 } from '@reactvision/react-viro';
 import type { Room, Vec3 } from '../../types';
-import windowFrameAsset from '../../assets/models/window_frame.obj';
 
-// Programmatic solid-white material for the window frame — no `.mtl` / image textures
-// required, keeping the bundle small and avoiding texture-loading crashes.
+// Programmatic solid-white material for the window frame — no external geometry or
+// textures required, keeping the bundle small and avoiding texture-loading crashes.
 ViroMaterials.createMaterials({
   whiteWindowFrame: {
     diffuseColor: '#FFFFFF',
@@ -45,6 +46,13 @@ const PLACEMENT_DISTANCE_METERS = 2.0;
 const PLACEMENT_HEIGHT_DROP_METERS = 0.3;
 const MIN_PLANE_DISTANCE_METERS = 1.5;
 const MAX_PLANE_DISTANCE_METERS = 3.5;
+
+// Official window dimensions: 1 m tall × 2 m wide (2:1 aspect ratio).
+const WINDOW_WIDTH_METERS = 2.0;
+const WINDOW_HEIGHT_METERS = 1.0;
+const WINDOW_DEPTH_METERS = 0.08;
+const FRAME_THICKNESS_METERS = 0.08;
+const FRAME_DEPTH_METERS = 0.12;
 
 export interface PortalPlacement {
   position: Vec3;
@@ -213,11 +221,47 @@ function PortalARScene({ room, onPlaced, onPlacementError, apiRef }: PortalARSce
       {placement ? (
         <ViroPortalScene passable position={placement.position} rotation={placement.rotation}>
           <ViroPortal>
-            <Viro3DObject
-              type="OBJ"
-              source={windowFrameAsset}
+            {/* Portal mask (3D cutout): a box defines the 2m × 1m opening. */}
+            <ViroBox
+              width={WINDOW_WIDTH_METERS}
+              height={WINDOW_HEIGHT_METERS}
+              length={WINDOW_DEPTH_METERS}
               materials={['whiteWindowFrame']}
             />
+
+            {/* Visual white frame: four thin boxes (top / bottom / left / right). */}
+            <ViroNode>
+              <ViroBox
+                position={[0, WINDOW_HEIGHT_METERS / 2, 0]}
+                width={WINDOW_WIDTH_METERS}
+                height={FRAME_THICKNESS_METERS}
+                length={FRAME_DEPTH_METERS}
+                materials={['whiteWindowFrame']}
+              />
+              <ViroBox
+                position={[0, -WINDOW_HEIGHT_METERS / 2, 0]}
+                width={WINDOW_WIDTH_METERS}
+                height={FRAME_THICKNESS_METERS}
+                length={FRAME_DEPTH_METERS}
+                materials={['whiteWindowFrame']}
+              />
+              <ViroBox
+                position={[-WINDOW_WIDTH_METERS / 2, 0, 0]}
+                width={FRAME_THICKNESS_METERS}
+                height={WINDOW_HEIGHT_METERS}
+                length={FRAME_DEPTH_METERS}
+                materials={['whiteWindowFrame']}
+              />
+              <ViroBox
+                position={[WINDOW_WIDTH_METERS / 2, 0, 0]}
+                width={FRAME_THICKNESS_METERS}
+                height={WINDOW_HEIGHT_METERS}
+                length={FRAME_DEPTH_METERS}
+                materials={['whiteWindowFrame']}
+              />
+            </ViroNode>
+
+            {/* 360° classroom revealed through the portal. */}
             <Viro360Image source={{ uri: room.panoramic360Url }} />
           </ViroPortal>
         </ViroPortalScene>

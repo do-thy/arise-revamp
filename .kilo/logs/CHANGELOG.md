@@ -86,6 +86,15 @@
 - **Files Affected:** `components/ar/PortalScene.tsx`, `assets/models/README.md`, `.kilo/logs/CHANGELOG.md`
 - **Manual Actions Required by Developer:** None (no `.mtl`/texture files needed for the window frame).
 
+---
+
+- **Timestamp:** 2026-08-22 15:00
+- **Feature / Component:** Deprecation of External 3D Models for Programmatic AR Primitives
+- **Changes Made:** Removed the `window_frame.obj` dependency entirely. Transitioned the architecture to construct the portal mask and white frame entirely from `<ViroBox>` primitives at a 2:1 aspect ratio (2 m width × 1 m height) for zero-memory asset loading. Validated with `tsc --noEmit` (0 errors).
+- **Files Affected:** `components/ar/PortalScene.tsx`, `.kilo/rules/blueprint.md`, `assets/models/README.md`, `metro.config.js`, `types/modules.d.ts`, `.kilo/logs/CHANGELOG.md`
+- **Manual Actions Required by Developer:** None (no external 3D geometry required).
+
+
 
 
 
