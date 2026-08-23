@@ -78,5 +78,14 @@
 - **Files Affected:** `components/ar/PortalScene.tsx`, `screens/PlacardScannerScreen.tsx`, `.kilo/rules/blueprint.md`, `assets/models/README.md`, `.kilo/logs/CHANGELOG.md`
 - **Manual Actions Required by Developer:** Place `assets/models/window_frame.obj` (+ `.mtl` + textures) instead of `door_frame.obj`.
 
+---
+
+- **Timestamp:** 2026-08-22 14:40
+- **Feature / Component:** AR Window Frame Material Optimization
+- **Changes Made:** Removed the `.mtl` file dependency for the window frame to reduce app size and prevent texture-loading crashes. Implemented a code-defined `ViroMaterials` material (`whiteWindowFrame` → solid `#FFFFFF`, Lambert) applied via `materials={['whiteWindowFrame']}` on the `<Viro3DObject>`. Validated with `tsc --noEmit` (0 errors).
+- **Files Affected:** `components/ar/PortalScene.tsx`, `assets/models/README.md`, `.kilo/logs/CHANGELOG.md`
+- **Manual Actions Required by Developer:** None (no `.mtl`/texture files needed for the window frame).
+
+
 
 

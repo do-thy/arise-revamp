@@ -20,6 +20,7 @@ import {
   ViroARSceneNavigator,
   Viro360Image,
   Viro3DObject,
+  ViroMaterials,
   ViroPortal,
   ViroPortalScene,
   ViroTrackingStateConstants,
@@ -30,6 +31,15 @@ import {
 } from '@reactvision/react-viro';
 import type { Room, Vec3 } from '../../types';
 import windowFrameAsset from '../../assets/models/window_frame.obj';
+
+// Programmatic solid-white material for the window frame — no `.mtl` / image textures
+// required, keeping the bundle small and avoiding texture-loading crashes.
+ViroMaterials.createMaterials({
+  whiteWindowFrame: {
+    diffuseColor: '#FFFFFF',
+    lightingModel: 'Lambert',
+  },
+});
 
 const PLACEMENT_DISTANCE_METERS = 2.0;
 const PLACEMENT_HEIGHT_DROP_METERS = 0.3;
@@ -203,7 +213,11 @@ function PortalARScene({ room, onPlaced, onPlacementError, apiRef }: PortalARSce
       {placement ? (
         <ViroPortalScene passable position={placement.position} rotation={placement.rotation}>
           <ViroPortal>
-            <Viro3DObject type="OBJ" source={windowFrameAsset} />
+            <Viro3DObject
+              type="OBJ"
+              source={windowFrameAsset}
+              materials={['whiteWindowFrame']}
+            />
             <Viro360Image source={{ uri: room.panoramic360Url }} />
           </ViroPortal>
         </ViroPortalScene>

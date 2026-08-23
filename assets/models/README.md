@@ -5,7 +5,7 @@ They are **not** committed and must be supplied manually (see `.kilo/logs/CHANGE
 
 | # | File | Purpose |
 | --- | --- | --- |
-| 1 | `assets/models/window_frame.obj` (+ `.mtl`) | Horizontal 3D window frame mounted by `<Viro3DObject type="OBJ">` inside the portal (wider FOV). |
+| 1 | `assets/models/window_frame.obj` | Horizontal 3D window frame mounted by `<Viro3DObject type="OBJ">` inside the portal (wider FOV). Rendered with a programmatic solid-white `ViroMaterials` material — no `.mtl`/texture files required. |
 | 2 | `assets/models/det_model.onnx` | PaddleOCR DBNet text detection model. |
 | 3 | `assets/models/cls_model.onnx` | PaddleOCR angle classifier (`useAngleCls` is enabled). |
 | 4 | `assets/models/rec_model.onnx` | PaddleOCR CRNN text recognition model. |
@@ -18,4 +18,5 @@ They are **not** committed and must be supplied manually (see `.kilo/logs/CHANGE
 > **Removed:** `door_detector.tflite` is no longer required — TFLite door detection was
 > replaced by point-and-tap raycast AR placement (`components/ar/PortalScene.tsx`).
 
-Also drop any textures referenced by `window_frame.mtl` next to the OBJ.
+> **Material:** the window frame uses a code-defined `whiteWindowFrame` material (solid
+> `#FFFFFF`, Lambert), so no `.mtl` or image texture files are required.
