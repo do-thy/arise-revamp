@@ -62,3 +62,12 @@
 - **Files Affected:** `screens/LoginScreen.tsx`, `screens/HomeScreen.tsx`, `screens/PlacardScannerScreen.tsx`, `hooks/useAuth.tsx`, `navigation/types.ts`, `navigation/RootNavigator.tsx`, `App.tsx`, `assets/models/README.md`
 - **Manual Actions Required by Developer:** None (build-time assets/env already listed above).
 
+---
+
+- **Timestamp:** 2026-08-22 14:00
+- **Feature / Component:** AR Portal Placement Architecture Refactor
+- **Changes Made:** Removed the automated TFLite door-detection pipeline (`services/tflite/doorDetector.ts`, `frameSource.ts`, `types.ts`, `hooks/useDoorDetector.ts`, and the old `ViroPortalRoom`/`ArPortalScene` components) and replaced it with a deterministic "Point-and-Tap" flow. Implemented `components/ar/PortalScene.tsx` with tracking-state gating, center-viewport raycasting against vertical planes (1.5–3.5 m), a 2.0 m forward-vector fallback, and yaw-only upright stabilization (pitch/roll = 0). Updated Phase C to an `arPlacement → portal` state machine with an AR crosshair HUD + "PLACE PORTAL HERE" button. Validated with `tsc --noEmit` (0 errors).
+- **Files Affected:** `.kilo/rules/blueprint.md`, `assets/models/README.md`, `components/ar/PortalScene.tsx`, `screens/PlacardScannerScreen.tsx`, `types/index.ts`, `services/tflite/README.md`, `.kilo/logs/CHANGELOG.md`
+- **Manual Actions Required by Developer:** Updated checklist removing TFLite model training; remaining deliverables are `door_frame.obj` (+ `.mtl`), `det_model.onnx`, `cls_model.onnx`, `rec_model.onnx`, `assets/360/room_101.jpg`, plus Firebase `.env` / `google-services.json`.
+
+

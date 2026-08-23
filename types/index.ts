@@ -40,11 +40,6 @@ export interface RoomMatch {
 
 export type Vec3 = [number, number, number];
 
-export interface Point2D {
-  x: number;
-  y: number;
-}
-
 /** A rectangle expressed as a fraction (0..1) of its containing space. */
 export interface NormalizedRect {
   x: number;
@@ -58,16 +53,8 @@ export type ScanPhase =
   | 'capture'
   | 'processing'
   | 'suggestions'
-  | 'doorScan'
+  | 'arPlacement'
   | 'portal';
-
-/** A single detected door from the TFLite detector. Coordinates are normalized 0..1. */
-export interface DoorDetection {
-  bbox: { x: number; y: number; width: number; height: number };
-  center: Point2D;
-  confidence: number;
-  label: string;
-}
 
 export type AuthStatus = 'initializing' | 'signedOut' | 'signedIn';
 
@@ -78,10 +65,13 @@ export interface AppUser {
   displayName: string | null;
 }
 
-/** Discriminated-union scanner state. */
+/**
+ * Discriminated-union scanner state.
+ * Phase C (`arPlacement` -> `portal`) uses point-and-tap raycast anchoring.
+ */
 export type ScannerState =
   | { phase: 'capture' }
   | { phase: 'processing' }
   | { phase: 'suggestions'; normalizedText: string; matches: RoomMatch[] }
-  | { phase: 'doorScan'; room: Room }
-  | { phase: 'portal'; room: Room; doorCenter: Point2D };
+  | { phase: 'arPlacement'; room: Room }
+  | { phase: 'portal'; room: Room };

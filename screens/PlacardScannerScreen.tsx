@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -10,7 +10,7 @@ import { ReticleOverlay } from '../components/ui/ReticleOverlay';
 import { SuggestionPills } from '../components/ui/SuggestionPills';
 import { PillButton } from '../components/ui/PillButton';
 import { BottomSheet } from '../components/ui/BottomSheet';
-import { ArPortalScene } from '../components/ar/ArPortalScene';
+import { PortalScene, type PortalSceneHandle } from '../components/ar/PortalScene';
 import {
   initializePaddleOcr,
   isPaddleOcrInitialized,
@@ -20,8 +20,6 @@ import {
 import { PADDLE_OCR_MODELS } from '../services/ocr/models';
 import { getRooms } from '../services/firebase';
 import { matchRooms } from '../services/matching/fuzzyMatch';
-import { createCameraFrameSource } from '../services/tflite/frameSource';
-import { useDoorDetector } from '../hooks/useDoorDetector';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlacardScanner'>;
 
@@ -29,32 +27,25 @@ export function PlacardScannerScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
+  const portalRef = useRef<PortalSceneHandle>(null);
 
   const [state, setState] = useState<ScannerState>({ phase: 'capture' });
   const [reticle, setReticle] = useState<NormalizedRect | null>(null);
   const [frozenUri, setFrozenUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [portalMounted, setPortalMounted] = useState(false);
+  const [placementError, setPlacementError] = useState<string | null>(null);
+  const [arMounted, setArMounted] = useState(false);
 
-  const isDoorScan = state.phase === 'doorScan';
-  const frameSource = useMemo(() => createCameraFrameSource(cameraRef), []);
-  const { detection, error: detectionError } = useDoorDetector(isDoorScan, frameSource);
-
-  // On first high-confidence door detection, advance to the AR portal phase.
-  useEffect(() => {
-    if (state.phase === 'doorScan' && detection) {
-      setState({ phase: 'portal', room: state.room, doorCenter: detection.center });
-    }
-  }, [detection, state]);
+  const isArPhase = state.phase === 'arPlacement' || state.phase === 'portal';
 
   // Camera <-> Viro handoff: delay mounting Viro until the 2D camera has released.
   useEffect(() => {
-    if (state.phase === 'portal') {
-      const timer = setTimeout(() => setPortalMounted(true), 350);
+    if (isArPhase) {
+      const timer = setTimeout(() => setArMounted(true), 350);
       return () => clearTimeout(timer);
     }
-    setPortalMounted(false);
-  }, [state.phase]);
+    setArMounted(false);
+  }, [isArPhase]);
 
   const handleReticleRect = useCallback((rect: NormalizedRect) => setReticle(rect), []);
 
@@ -76,12 +67,7 @@ export function PlacardScannerScreen({ navigation }: Props) {
         skipProcessing: false,
       });
 
-      const croppedUri = await preparePlacard(
-        photo.uri,
-        reticle,
-        photo.width,
-        photo.height,
-      );
+      const croppedUri = await preparePlacard(photo.uri, reticle, photo.width, photo.height);
       setFrozenUri(croppedUri);
 
       const results = await recognize(croppedUri);
@@ -92,7 +78,7 @@ export function PlacardScannerScreen({ navigation }: Props) {
       const exact = matches.find((m) => m.isExact);
 
       if (exact) {
-        setState({ phase: 'doorScan', room: exact.room });
+        setState({ phase: 'arPlacement', room: exact.room });
       } else {
         setState({
           phase: 'suggestions',
@@ -107,7 +93,7 @@ export function PlacardScannerScreen({ navigation }: Props) {
   };
 
   const handleSelectRoom = (room: Room) => {
-    setState({ phase: 'doorScan', room });
+    setState({ phase: 'arPlacement', room });
   };
 
   const handleCancel = () => {
@@ -117,6 +103,21 @@ export function PlacardScannerScreen({ navigation }: Props) {
   };
 
   const handleClose = () => navigation.goBack();
+
+  const handlePlaced = useCallback(() => {
+    setState((prev) =>
+      prev.phase === 'arPlacement' ? { phase: 'portal', room: prev.room } : prev,
+    );
+  }, []);
+
+  const handlePlacePortal = useCallback(() => {
+    setPlacementError(null);
+    portalRef.current?.placePortal();
+  }, []);
+
+  const handlePlacementError = useCallback((message: string) => {
+    setPlacementError(message);
+  }, []);
 
   const renderBottomUI = () => {
     switch (state.phase) {
@@ -148,19 +149,7 @@ export function PlacardScannerScreen({ navigation }: Props) {
             onCancel={handleCancel}
           />
         );
-      case 'doorScan':
-        return (
-          <>
-            {detectionError ? (
-              <Text style={styles.errorText}>{detectionError}</Text>
-            ) : null}
-            <View style={styles.instructionPill}>
-              <Text style={styles.instructionText}>
-                Point your camera at the door to reveal information.
-              </Text>
-            </View>
-          </>
-        );
+      case 'arPlacement':
       case 'portal':
         return null;
     }
@@ -174,7 +163,7 @@ export function PlacardScannerScreen({ navigation }: Props) {
     return (
       <View style={styles.center}>
         <Text style={styles.permissionText}>
-          We need camera access to scan placards and detect doors.
+          We need camera access to scan placards and place the AR portal.
         </Text>
         <PillButton title="Grant Camera Access" onPress={() => requestPermission()} />
       </View>
@@ -182,16 +171,47 @@ export function PlacardScannerScreen({ navigation }: Props) {
   }
 
   const reticleColor =
-    state.phase === 'suggestions' || state.phase === 'doorScan'
-      ? colors.reticleSearch
-      : colors.reticleTarget;
+    state.phase === 'suggestions' ? colors.reticleSearch : colors.reticleTarget;
 
-  // Portal phase: camera fully unmounted, Viro engine mounted.
-  if (state.phase === 'portal' && portalMounted) {
+  // Phase C: AR viewfinder (placement HUD) or placed portal (bottom sheet).
+  if (arMounted && (state.phase === 'arPlacement' || state.phase === 'portal')) {
+    const room = state.room;
     return (
       <View style={styles.flex}>
-        <ArPortalScene room={state.room} doorCenter={state.doorCenter} />
-        <BottomSheet room={state.room} onClose={handleClose} />
+        <PortalScene
+          ref={portalRef}
+          room={room}
+          onPlaced={handlePlaced}
+          onPlacementError={handlePlacementError}
+        />
+
+        {state.phase === 'arPlacement' ? (
+          <View style={styles.arHud} pointerEvents="box-none">
+            <View style={styles.crosshairContainer} pointerEvents="none">
+              <View style={styles.crosshair}>
+                <View style={styles.crosshairH} />
+                <View style={styles.crosshairV} />
+                <View style={styles.crosshairDot} />
+              </View>
+            </View>
+            <View
+              style={[styles.bottom, { paddingBottom: insets.bottom + spacing.lg }]}
+              pointerEvents="box-none"
+            >
+              {placementError ? (
+                <Text style={styles.errorText}>{placementError}</Text>
+              ) : null}
+              <View style={styles.instructionPill}>
+                <Text style={styles.instructionText}>
+                  Stand ~2m from the doorway, aim at the base, and tap to place portal.
+                </Text>
+              </View>
+              <PillButton title="PLACE PORTAL HERE" onPress={handlePlacePortal} />
+            </View>
+          </View>
+        ) : (
+          <BottomSheet room={room} onClose={handleClose} />
+        )}
       </View>
     );
   }
@@ -239,6 +259,50 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
+  arHud: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  crosshairContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  crosshair: {
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  crosshairH: {
+    position: 'absolute',
+    top: 27,
+    width: 56,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: colors.textOnPrimary,
+  },
+  crosshairV: {
+    position: 'absolute',
+    left: 27,
+    width: 2,
+    height: 56,
+    borderRadius: 1,
+    backgroundColor: colors.textOnPrimary,
+  },
+  crosshairDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+  },
   instructionPill: {
     backgroundColor: colors.accentTint,
     borderRadius: 999,
@@ -274,4 +338,5 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
 });
+
 

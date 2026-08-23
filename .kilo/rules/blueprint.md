@@ -11,12 +11,13 @@
 
 ARISE is an indoor wayfinding + augmented reality application. A user logs in, scans a
 physical room placard with the camera, and the app OCRs the placard text, resolves the
-room via fuzzy matching against a room database, then uses on-device door detection and
-Viro AR to anchor a **portal** to the detected door. Peering through the portal reveals a
-**360° panoramic image** of the matched room, plus an information bottom sheet.
+room via fuzzy matching against a room database, then uses a deterministic point-and-tap
+raycast against Viro AR vertical planes to anchor a **portal** to the doorway. Peering
+through the portal reveals a **360° panoramic image** of the matched room, plus an
+information bottom sheet.
 
 The product is deliberately decoupled into a **Three-Tier Model** so that the heavy
-native AI/AR dependencies (OCR, TFLite, Viro) can be swapped, mocked, or stubbed without
+native AI/AR dependencies (OCR, Viro) can be swapped, mocked, or stubbed without
 touching the presentation layer.
 
 ---
@@ -48,8 +49,8 @@ The repository is a **pristine Expo SDK 57 template**:
 - **`@reactvision/react-viro` ^2.58** — `ViroARSceneNavigator`, `ViroARScene`,
   `ViroPortalScene`, `ViroPortal`, `Viro360Image`, `Viro3DObject`. Config plugin
   `@reactvision/react-viro` (verified against the official Expo starter kit).
-- **`react-native-fast-tflite` ^3.0** — Nitro-Modules based; `loadTensorflowModel(model, delegates)`
-  / `useTensorflowModel`; `model.run([ArrayBuffer])`. Requires `tflite` Metro asset ext.
+- ~~`react-native-fast-tflite` ^3.0~~ — **deprecated**: removed with the TFLite door-detection
+  pipeline; the npm package remains installed but is unused (see `services/tflite/README.md`).
 - **`onnxruntime-react-native` ^1.24** — `ort.InferenceSession.create(uri)` + `session.run`.
 - **`firebase` ^12** (JS SDK) — `firebase/auth` + `firebase/firestore` with AsyncStorage
   persistence (no `google-services.json` required for email/password).
@@ -62,7 +63,6 @@ The repository is a **pristine Expo SDK 57 template**:
 SDK 57 runs **React Native New Architecture only** (legacy arch removed). All selected
 native libraries are New-Architecture-compatible:
 
-- `react-native-fast-tflite` is built on Nitro Modules (New-Arch native).
 - `@reactvision/react-viro` ^2.58 ships New-Arch-compatible builds.
 - `onnxruntime-react-native` 1.24 has New-Arch support but is the **highest risk**
   dependency; it is isolated behind a lazy loader and a graceful-degradation path.
@@ -97,7 +97,7 @@ native libraries are New-Architecture-compatible:
 | Tier | Modules | Responsibility |
 | --- | --- | --- |
 | **Presentation** | `screens/`, `components/ui/`, `components/ar/`, `navigation/`, `hooks/` | Render UI, drive the scanner state machine, dispatch to services via hooks |
-| **AI/CV Business Logic** | `services/ocr/`, `services/tflite/`, `services/matching/` | OCR inference, vertical-text spatial sorting, door detection, fuzzy room resolution |
+| **AI/CV Business Logic** | `services/ocr/`, `services/matching/` | OCR inference, vertical-text spatial sorting, fuzzy room resolution |
 | **Data/Storage** | `services/firebase/`, `services/storage/` | Auth session, Firestore room queries, secure session persistence |
 
 ---
@@ -115,7 +115,8 @@ arise-revamp/
 │   ├── rules/blueprint.md
 │   └── logs/CHANGELOG.md
 ├── assets/
-│   └── models/                     # door_detector.tflite, door_frame.obj (+ .mtl), OCR .onnx
+│   ├── models/                     # door_frame.obj (+ .mtl), OCR .onnx
+│   └── 360/                        # room_101.jpg (sample 360° equirectangular texture)
 ├── theme/                          # Design system
 │   ├── colors.ts
 │   ├── typography.ts
@@ -135,8 +136,7 @@ arise-revamp/
 │   ├── HomeScreen.tsx
 │   └── PlacardScannerScreen.tsx
 ├── hooks/
-│   ├── useAuth.ts
-│   └── useDoorDetector.ts
+│   └── useAuth.tsx
 ├── services/
 │   ├── firebase/
 │   │   ├── config.ts
@@ -149,8 +149,7 @@ arise-revamp/
 │   │   ├── crop.ts
 │   │   └── types.ts
 │   ├── tflite/
-│   │   ├── doorDetector.ts
-│   │   └── types.ts
+│   │   └── README.md               # deprecated (archived)
 │   ├── matching/
 │   │   └── fuzzyMatch.ts
 │   └── storage/
@@ -167,8 +166,7 @@ arise-revamp/
     │   ├── SuggestionPills.tsx
     │   └── BottomSheet.tsx
     └── ar/
-        ├── ArPortalScene.tsx
-        └── ViroPortalRoom.tsx
+        └── PortalScene.tsx
 ```
 
 ---
@@ -242,13 +240,6 @@ interface RoomMatch {
 
 type OcrResult = { text: string; confidence: number };
 
-type DoorDetection = {
-  bbox: { x: number; y: number; width: number; height: number };
-  center: { x: number; y: number }; // normalized 0..1 viewport coords
-  confidence: number;
-  label: string;                    // "door"
-};
-
 type Vec3 = [number, number, number];
 ```
 
@@ -279,33 +270,31 @@ Discriminated-union state:
  └───────────┘         └─────────────┘           └──────┬────────┘
       ▲                    │ exact match               │ pill selected
       │                    ▼                            ▼
-      │              ┌──────────────┐  door found  ┌──────────────┐
-      └── cancel ◄─── │  doorScan    │ ───────────► │   portal     │
-                      └──────────────┘              └──────────────┘
+      │              ┌──────────────┐  tap to place ┌──────────────┐
+      └── cancel ◄─── │ arPlacement  │ ────────────► │   portal     │
+                      └──────────────┘               └──────────────┘
 ```
 
-| Phase | Reticle | Bottom UI |
+| Phase | Viewfinder | Bottom UI |
 | --- | --- | --- |
 | `capture` | Red `#E60000` | "Ensure the entire placard is inside the box." + "SCAN PLACARD" |
 | `processing` | Red | Spinner ("Reading placard…") |
 | `suggestions` | Yellow `#FFCC00` | "No exact match. Did you mean?" + suggestion pills + Cancel |
-| `doorScan` | Yellow | "Point your camera at the door to reveal information." |
-| `portal` | hidden | AR scene + information bottom sheet |
+| `arPlacement` | AR + centered crosshair | Guidance banner + "PLACE PORTAL HERE" |
+| `portal` | AR (portal anchored) | Room information bottom sheet |
 
 ### 7.3 Camera lifecycle & native resource handoff (critical)
 
-The camera is a **single exclusive native resource**. Three subsystems compete for it
-(2D `expo-camera` preview → TFLite frame loop → Viro AR session). To prevent native
-deadlocks we enforce a strict, explicit handoff:
+The camera is a **single exclusive native resource**. Two subsystems compete for it
+(2D `expo-camera` preview → Viro AR session). To prevent native deadlocks we enforce a
+strict, explicit handoff:
 
 1. **Phase A** owns `expo-camera` (`CameraView`). On scan: capture → `manipulateAsync` crop.
 2. **Phase B** does **not** touch the camera (frozen snapshot stays on screen).
-3. **Phase C doorScan** keeps `expo-camera` preview alive for the TFLite loop but **unmounts
-   the reticle capture path**; the detection loop polls `takePictureAsync` throttled frames.
-4. **Phase C portal** must **fully unmount `CameraView`** *before* mounting
-   `ViroARSceneNavigator` (and vice-versa on back navigation). We gate on
-   `setCameraActive(false)` + a `setTimeout`/`onCameraReady` guard so Viro only mounts
-   after the 2D camera surface is released, and re-mount the camera only after Viro unmounts.
+3. **Phase C (`arPlacement` → `portal`)** must **fully unmount `CameraView`** *before*
+   mounting `ViroARSceneNavigator` (and vice-versa on back navigation). We gate on a
+   `setTimeout`-backed `arMounted` flag so Viro only mounts after the 2D camera surface is
+   released, and re-mount the camera only after Viro unmounts.
 
 This is encoded as a single `ScanPhase` state; the render tree renders **exactly one**
 camera consumer at a time (never `CameraView` and `ViroARSceneNavigator` simultaneously).
@@ -334,14 +323,13 @@ camera consumer at a time (never `CameraView` and `ViroARSceneNavigator` simulta
   whose X-coordinates are within a threshold and sorts by ascending Y to reconstruct
   top-to-bottom vertical strings; falls back to a left-to-right, top-to-bottom sort.
 
-### 8.3 TFLite door detection (`services/tflite/`)
+### 8.3 AR placement (deprecated TFLite door detection)
 
-- `doorDetector.ts` — `loadTensorflowModel(require('assets/models/door_detector.tflite'), [])`
-  (lazy + cached). `detectDoor(rgbArrayBuffer)` decodes the 4-tensor SSD output
-  (boxes/classes/scores/count), finds the highest-score `door` class, and returns
-  `DoorDetection` when `confidence >= 0.80` (see `DOOR_CONFIDENCE_THRESHOLD`).
-- `hooks/useDoorDetector.ts` — throttled continuous loop that stops on first high-confidence
-  detection (per spec) and returns the 2D center for AR raycasting.
+- ~~`services/tflite/`~~ — the automated TFLite door-detection runner (`doorDetector.ts`,
+  `frameSource.ts`, `types.ts`) and the `useDoorDetector` hook have been **removed** and
+  archived as `services/tflite/README.md`. There is no `door_detector.tflite` requirement.
+- Phase C now uses the deterministic point-and-tap raycast placement in
+  `components/ar/PortalScene.tsx` (see §9).
 
 ### 8.4 Fuzzy matching (`services/matching/`)
 
@@ -357,17 +345,28 @@ camera consumer at a time (never `CameraView` and `ViroARSceneNavigator` simulta
 
 ---
 
-## 9. AR Portal Rendering (`components/ar/`)
+## 9. AR Portal Rendering (`components/ar/PortalScene.tsx`)
 
-- `ViroPortalRoom.tsx` — a `ViroARScene` that:
-  1. raycasts the 2D door center against **vertical planes**
-     (`arSceneRef.current.performARHitTest({ x, y }, ['ExistingPlane', 'FeaturePoint'])`)
-     to obtain world `(X, Y, Z)`;
-  2. anchors a `<ViroPortalScene passable={true}>` at that point;
-  3. mounts `<ViroPortal>` with the `door_frame.obj` 3D asset;
-  4. renders `<Viro360Image source={{ uri: room.panoramic360Url }} />` inside the portal.
-- `ArPortalScene.tsx` — wraps `ViroARSceneNavigator` + `ViroPortalRoom`, manages the
-  `ViroARSceneNavigator` ref and hit-test request plumbing.
+`PortalScene` is a `forwardRef` component that wraps `ViroARSceneNavigator` and exposes a
+`placePortal()` imperative handle to the screen. Its inner `ViroARScene` implements the
+stabilized point-and-tap placement:
+
+1. **Tracking gating** — `onTrackingUpdated` is recorded into a ref; placement is rejected
+   until the state reaches `ViroTrackingStateConstants.TRACKING_NORMAL`.
+2. **Raycast** — on tap (scene `onClick`) or the "PLACE PORTAL HERE" button,
+   `performARHitTestWithPoint(0.5, 0.5)` hit-tests the viewport center against detected
+   planes. Results of type `ExistingPlane` / `ExistingPlaneUsingExtent` (vertical
+   walls/doors) within **1.5–3.5 m** of the camera are accepted.
+3. **Forward-vector fallback** — if no vertical plane matches, the anchor is projected
+   **2.0 m** forward along the camera orientation vector and dropped 0.3 m below the eye:
+   `Target = [Cx + fx·2.0, Cy − 0.3, Cz + fz·2.0]`.
+4. **Geometric stabilization (upright lock)** — pitch (X) and roll (Z) are forced to
+   `0°`; only the yaw is computed so the portal faces the user:
+   `Δx = Cx − Px`, `Δz = Cz − Pz`, `θY = atan2(Δx, Δz)·(180/π)`, then
+   `rotation={[0, θY, 0]}`.
+5. **Scene graph** — `<ViroPortalScene passable position rotation={[0, θY, 0]}>` wraps
+   `<ViroPortal>` containing `<Viro3DObject type="OBJ" source={door_frame.obj} />` and
+   `<Viro360Image source={{ uri: room.panoramic360Url }} />`.
 
 > Viro requires `npx expo prebuild` (ARCore on Android / ARKit on iOS) and the
 > `@reactvision/react-viro` config plugin in `app.json`.
@@ -378,11 +377,13 @@ camera consumer at a time (never `CameraView` and `ViroARSceneNavigator` simulta
 
 See `.kilo/logs/CHANGELOG.md` for the running list. Key items:
 
-1. **Model files** to place in `assets/models/`:
-   - `door_detector.tflite` — SSD MobileNet door detector (4 output tensors).
-   - `door_frame.obj` (+ `.mtl` + textures) — portal door frame.
-   - PaddleOCR ONNX artifacts — `det_model.onnx`, `rec_model.onnx`, `cls_model.onnx`
-     (loaded from app bundle / DocumentPicker).
+1. **Model files** to place in `assets/`:
+   - `assets/models/door_frame.obj` (+ `.mtl` + textures) — portal door frame.
+   - `assets/models/det_model.onnx` — PaddleOCR DBNet text detection.
+   - `assets/models/cls_model.onnx` — PaddleOCR angle classifier.
+   - `assets/models/rec_model.onnx` — PaddleOCR text recognition.
+   - `assets/360/room_101.jpg` — sample 360° equirectangular room texture.
+   (No TFLite door detector is required — see §8.3.)
 2. **Firebase** — populate `EXPO_PUBLIC_FIREBASE_*` in `.env`.
 3. **Google Sign-In** — `google-services.json` (Android) / `GoogleService-Info.plist` (iOS)
    + `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`.
@@ -395,10 +396,11 @@ See `.kilo/logs/CHANGELOG.md` for the running list. Key items:
 1. ✅ Blueprint + logging infra + config plugins + env template.
 2. Design system + shared types + env constants.
 3. Data/storage services (Firebase, SecureStore) + fuzzy matching (pure logic).
-4. AI/CV services (OCR pipeline + vertical sorter + TFLite detector).
+4. AI/CV services (OCR pipeline + vertical sorter).
 5. UI components + AR components.
 6. Screens (Login → Home → Scanner) + navigation + root App + hooks.
 7. Install dependencies, typecheck, validate.
+8. ✅ Phase C refactor: TFLite door detection → point-and-tap raycast AR placement.
 
 
 

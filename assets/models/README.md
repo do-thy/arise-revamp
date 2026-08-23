@@ -1,14 +1,18 @@
-# ARISE — Model Assets
+# ARISE — Manual Asset Deliverables
 
-Place the following files in this directory before running `npx expo prebuild` / a native build.
+Place the following files before running `npx expo prebuild` / a native build.
 They are **not** committed and must be supplied manually (see `.kilo/logs/CHANGELOG.md`).
 
-| File | Purpose | Source / Notes |
+| # | File | Purpose |
 | --- | --- | --- |
-| `door_detector.tflite` | Door object detector (Phase C) | MobileNet-SSD style model. Outputs: boxes `[1,N,4]`, classes `[1,N]`, scores `[1,N]`, count `[1]`. Verify the `door` class index against `DOOR_CLASS_INDEX` in `services/tflite/types.ts`. |
-| `door_frame.obj` (+ `.mtl` + textures) | Portal door frame (Phase C) | 3D door frame model loaded by `<Viro3DObject type="OBJ">`. |
-| `det_model.onnx` | PaddleOCR DBNet text detection | Exported PaddleOCR detection model. |
-| `rec_model.onnx` | PaddleOCR CRNN text recognition | Exported PaddleOCR recognition model. |
-| `cls_model.onnx` | PaddleOCR angle classifier | Required when `useAngleCls` is enabled (it is, by default). |
+| 1 | `assets/models/door_frame.obj` (+ `.mtl`) | 3D door frame mounted by `<Viro3DObject type="OBJ">` inside the portal. |
+| 2 | `assets/models/det_model.onnx` | PaddleOCR DBNet text detection model. |
+| 3 | `assets/models/cls_model.onnx` | PaddleOCR angle classifier (`useAngleCls` is enabled). |
+| 4 | `assets/models/rec_model.onnx` | PaddleOCR CRNN text recognition model. |
+| 5 | `assets/360/room_101.jpg` | Sample 360° equirectangular room texture (used as `Room.panoramic360Url`). |
+| 6 | `.env` and `google-services.json` | Firebase configuration (see `.env.example`). |
 
-Also drop any textures referenced by `door_frame.mtl` here.
+> **Removed:** `door_detector.tflite` is no longer required — TFLite door detection was
+> replaced by point-and-tap raycast AR placement (`components/ar/PortalScene.tsx`).
+
+Also drop any textures referenced by `door_frame.mtl` next to the OBJ.
