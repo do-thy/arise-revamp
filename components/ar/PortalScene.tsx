@@ -16,7 +16,9 @@ import {
   useState,
   type MutableRefObject,
 } from 'react';
+import type { ImageSourcePropType } from 'react-native';
 import {
+  Viro3DObject,
   ViroARScene,
   ViroARSceneNavigator,
   ViroBox,
@@ -39,6 +41,10 @@ ViroMaterials.createMaterials({
   whiteWindowFrame: {
     diffuseColor: '#FFFFFF',
     lightingModel: 'Lambert',
+  },
+  // Add this invisible mask!
+  portalMask: {
+    diffuseColor: 'rgba(255, 255, 255, 0)', 
   },
 });
 
@@ -68,6 +74,8 @@ interface PortalSceneProps {
   room: Room;
   onPlaced: () => void;
   onPlacementError?: (message: string) => void;
+  /** Reports whether AR tracking has reached `TRACKING_NORMAL` (gates the HUD button). */
+  onTrackingStateChange?: (ready: boolean) => void;
 }
 
 function distance(a: Vec3, b: Vec3): number {
@@ -94,7 +102,13 @@ interface PortalARSceneProps extends PortalSceneProps {
   apiRef: MutableRefObject<PortalSceneHandle | null>;
 }
 
-function PortalARScene({ room, onPlaced, onPlacementError, apiRef }: PortalARSceneProps) {
+function PortalARScene({
+  room,
+  onPlaced,
+  onPlacementError,
+  onTrackingStateChange,
+  apiRef,
+}: PortalARSceneProps) {
   const sceneRef = useRef<ViroARScene>(null);
   const cameraPose = useRef<CameraPose | null>(null);
   const trackingNormal = useRef(false);
@@ -109,9 +123,11 @@ function PortalARScene({ room, onPlaced, onPlacementError, apiRef }: PortalARSce
 
   const onTrackingUpdated = useCallback(
     (state: ViroTrackingState, _reason: ViroTrackingReason) => {
-      trackingNormal.current = state === ViroTrackingStateConstants.TRACKING_NORMAL;
+      const ready = state === ViroTrackingStateConstants.TRACKING_NORMAL;
+      trackingNormal.current = ready;
+      onTrackingStateChange?.(ready);
     },
-    [],
+    [onTrackingStateChange],
   );
 
   const readCameraPose = useCallback(async (): Promise<CameraPose | null> => {
@@ -211,6 +227,13 @@ function PortalARScene({ room, onPlaced, onPlacementError, apiRef }: PortalARSce
     void placePortal();
   }, [placePortal]);
 
+  // Safely grab the URL using the exact Firebase field name we verified
+  const rawUrl = (room as any).panoImageUrl || (room as any).panoramic360Url || 'LOCAL_TEST_LAB';
+  
+  const panoSource = rawUrl === 'LOCAL_TEST_LAB'
+    ? require('../../assets/360/room_101.jpg')
+    : { uri: rawUrl };
+
   return (
     <ViroARScene
       ref={sceneRef}
@@ -220,50 +243,57 @@ function PortalARScene({ room, onPlaced, onPlacementError, apiRef }: PortalARSce
     >
       {placement ? (
         <ViroPortalScene passable position={placement.position} rotation={placement.rotation}>
+          
+          {/* 1. THE MASK: Goes strictly inside ViroPortal */}
           <ViroPortal>
-            {/* Portal mask (3D cutout): a box defines the 2m × 1m opening. */}
+            <Viro3DObject
+              source={require('../../assets/models/portal.obj')}
+              type="OBJ"
+              scale={[WINDOW_WIDTH_METERS, WINDOW_HEIGHT_METERS, 1]}
+              materials={['portalMask']} // <-- ADD THIS LINE
+            />
+          </ViroPortal>
+          {/* ^^^ WE CLOSED THE PORTAL TAG HERE ^^^ */}
+
+          {/* 2. THE FRAME: Must be a sibling to the portal, not a child of it! */}
+          <ViroNode>
             <ViroBox
+              position={[0, WINDOW_HEIGHT_METERS / 2, 0]}
               width={WINDOW_WIDTH_METERS}
-              height={WINDOW_HEIGHT_METERS}
-              length={WINDOW_DEPTH_METERS}
+              height={FRAME_THICKNESS_METERS}
+              length={FRAME_DEPTH_METERS}
               materials={['whiteWindowFrame']}
             />
+            <ViroBox
+              position={[0, -WINDOW_HEIGHT_METERS / 2, 0]}
+              width={WINDOW_WIDTH_METERS}
+              height={FRAME_THICKNESS_METERS}
+              length={FRAME_DEPTH_METERS}
+              materials={['whiteWindowFrame']}
+            />
+            <ViroBox
+              position={[-WINDOW_WIDTH_METERS / 2, 0, 0]}
+              width={FRAME_THICKNESS_METERS}
+              height={WINDOW_HEIGHT_METERS}
+              length={FRAME_DEPTH_METERS}
+              materials={['whiteWindowFrame']}
+            />
+            <ViroBox
+              position={[WINDOW_WIDTH_METERS / 2, 0, 0]}
+              width={FRAME_THICKNESS_METERS}
+              height={WINDOW_HEIGHT_METERS}
+              length={FRAME_DEPTH_METERS}
+              materials={['whiteWindowFrame']}
+            />
+          </ViroNode>
 
-            {/* Visual white frame: four thin boxes (top / bottom / left / right). */}
-            <ViroNode>
-              <ViroBox
-                position={[0, WINDOW_HEIGHT_METERS / 2, 0]}
-                width={WINDOW_WIDTH_METERS}
-                height={FRAME_THICKNESS_METERS}
-                length={FRAME_DEPTH_METERS}
-                materials={['whiteWindowFrame']}
-              />
-              <ViroBox
-                position={[0, -WINDOW_HEIGHT_METERS / 2, 0]}
-                width={WINDOW_WIDTH_METERS}
-                height={FRAME_THICKNESS_METERS}
-                length={FRAME_DEPTH_METERS}
-                materials={['whiteWindowFrame']}
-              />
-              <ViroBox
-                position={[-WINDOW_WIDTH_METERS / 2, 0, 0]}
-                width={FRAME_THICKNESS_METERS}
-                height={WINDOW_HEIGHT_METERS}
-                length={FRAME_DEPTH_METERS}
-                materials={['whiteWindowFrame']}
-              />
-              <ViroBox
-                position={[WINDOW_WIDTH_METERS / 2, 0, 0]}
-                width={FRAME_THICKNESS_METERS}
-                height={WINDOW_HEIGHT_METERS}
-                length={FRAME_DEPTH_METERS}
-                materials={['whiteWindowFrame']}
-              />
-            </ViroNode>
-
-            {/* 360° classroom revealed through the portal. */}
-            <Viro360Image source={{ uri: room.panoramic360Url }} />
-          </ViroPortal>
+          {/* 3. THE ENVIRONMENT: Also a sibling to the portal */}
+          
+          {/* A floating red box 1.5 meters INSIDE the room to prove the portal is open */}
+          <ViroBox position={[0, 0, -1.5]} scale={[0.4, 0.4, 0.4]} materials={['redTest']} />
+          
+          <Viro360Image source={panoSource} />
+          
         </ViroPortalScene>
       ) : null}
     </ViroARScene>

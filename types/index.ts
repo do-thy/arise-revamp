@@ -25,6 +25,8 @@ export interface Room {
   name: string;
   floor: string;
   building: string;
+  /** Human-readable room description (from `room_metadata.roomDescription`). */
+  description?: string;
   panoramic360Url: string;
   schedule: RoomSchedule;
   occupancy: RoomOccupancy;

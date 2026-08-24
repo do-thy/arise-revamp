@@ -10,7 +10,9 @@ config.resolver.assetExts = [
   ...(config.resolver.assetExts ?? []),
   'tflite',
   'onnx',
+  'obj',
+  'mtl',
+  'vrx',
 ];
 
 module.exports = config;
-

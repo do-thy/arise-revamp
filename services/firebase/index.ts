@@ -6,4 +6,4 @@ export {
   signOutUser,
   subscribeToAuthState,
 } from './auth';
-export { getRooms, getRoomById } from './rooms';
+export { getRooms, getRoomById, getRoomByOcrSearchTerm } from './rooms';

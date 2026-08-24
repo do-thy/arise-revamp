@@ -28,10 +28,15 @@ export function BottomSheet({ room, onClose }: BottomSheetProps) {
       <View style={styles.card}>
         <View style={styles.headerRow}>
           <View style={styles.headerText}>
-            <Text style={styles.title}>{room.name}</Text>
-            <Text style={styles.status}>
-              {STATUS_LABEL[room.schedule.currentStatus]}
-            </Text>
+            {/* Fallback to roomName if name isn't mapped properly */}
+            <Text style={styles.title}>{room.name || (room as any).roomName}</Text>
+            
+            {/* Safely check if schedule and currentStatus exist */}
+            {room.schedule?.currentStatus ? (
+              <Text style={styles.status}>
+                {STATUS_LABEL[room.schedule.currentStatus]}
+              </Text>
+            ) : null}
           </View>
           <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button">
             <Text style={styles.close}>✕</Text>
@@ -39,16 +44,34 @@ export function BottomSheet({ room, onClose }: BottomSheetProps) {
         </View>
 
         <View style={styles.details}>
-          <Row label="Building" value={room.building} />
-          <Row label="Floor" value={room.floor} />
-          <Row
-            label="Occupancy"
-            value={`${room.occupancy.currentCount} / ${room.occupancy.capacity}`}
-          />
-          {room.schedule.currentEvent ? (
+          {/* Safely check for building or buildingName */}
+          {room.building || (room as any).buildingName ? (
+             <Row label="Building" value={room.building || (room as any).buildingName} />
+          ) : null}
+          
+          {room.floor ? <Row label="Floor" value={room.floor} /> : null}
+          
+          {room.description ? (
+            <View style={styles.descriptionBlock}>
+              <Text style={styles.rowLabel}>Description</Text>
+              <Text style={styles.descriptionText}>{room.description}</Text>
+            </View>
+          ) : null}
+          
+          {/* Safely check occupancy object */}
+          {room.occupancy?.capacity && room.occupancy.capacity > 0 ? (
+            <Row
+              label="Occupancy"
+              value={`${room.occupancy.currentCount || 0} / ${room.occupancy.capacity}`}
+            />
+          ) : null}
+          
+          {/* Safely check schedule object */}
+          {room.schedule?.currentEvent ? (
             <Row label="Now" value={room.schedule.currentEvent} />
           ) : null}
-          {room.schedule.nextEvent ? (
+          
+          {room.schedule?.nextEvent ? (
             <Row
               label="Next"
               value={`${room.schedule.nextEvent}${
@@ -56,10 +79,11 @@ export function BottomSheet({ room, onClose }: BottomSheetProps) {
               }`}
             />
           ) : null}
-          <Row
-            label="Facilities"
-            value={room.occupancy.facilities.length ? room.occupancy.facilities.join(', ') : '—'}
-          />
+          
+          {/* Safely check facilities array length */}
+          {room.occupancy?.facilities?.length ? (
+            <Row label="Facilities" value={room.occupancy.facilities.join(', ')} />
+          ) : null}
         </View>
       </View>
     </View>
@@ -130,6 +154,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: spacing.md,
+  },
+  descriptionBlock: {
+    gap: spacing.xs,
+  },
+  descriptionText: {
+    ...typography.body,
+    color: colors.textPrimary,
+    lineHeight: 22,
   },
   rowLabel: {
     ...typography.caption,
